@@ -14,7 +14,7 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         tv = new TextView(this);
-        tv.setText("Testing Connection...\nPlease wait.");
+        tv.setText("Connecting to Telegram API...\nPlease wait.");
         tv.setTextSize(20);
         setContentView(tv);
 
@@ -27,6 +27,8 @@ public class MainActivity extends Activity {
                     HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                     conn.setRequestMethod("POST");
                     conn.setDoOutput(true);
+                    conn.setConnectTimeout(10000); // انتظار 10 ثواني كحد أقصى
+                    conn.setReadTimeout(10000);
                     conn.setRequestProperty("Content-Type", "application/json");
 
                     String jsonInputString = "{\"chat_id\": \"8197183486\", \"text\": \"Test Message From App\"}";
@@ -37,7 +39,7 @@ public class MainActivity extends Activity {
                     }
 
                     int responseCode = conn.getResponseCode();
-                    final String result = "HTTP Code: " + responseCode + "\n" + (responseCode == 200 ? "Success! Check Telegram." : "Failed! Check Token/Chat ID.");
+                    final String result = "HTTP Code: " + responseCode + "\n\n" + (responseCode == 200 ? "Success! Check Telegram." : "Failed! Check Token or Chat ID.");
 
                     runOnUiThread(new Runnable() {
                         @Override
@@ -50,7 +52,7 @@ public class MainActivity extends Activity {
                     runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
-                            tv.setText("Error: " + e.getMessage());
+                            tv.setText("Network Error:\n" + e.getMessage() + "\n\nPlease turn on VPN and try again.");
                         }
                     });
                 }
