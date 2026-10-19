@@ -1,4 +1,4 @@
-⃝package com.vipih;
+package com.vipih;
 
 import android.Manifest;
 import android.app.Activity;
